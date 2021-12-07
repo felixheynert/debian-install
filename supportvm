@@ -2,7 +2,7 @@
 ## Install vm
 ## Global VARS
 
-install_packages="open-vm-tools-desktop vsftpd tftp-hpa nginx nginx-extras wireshark netcat tcpdump ftp openssh-server git"
+install_packages="open-vm-tools-desktop vsftpd tftpd-hpa nginx nginx-extras wireshark netcat tcpdump ftp openssh-server git"
 
 ## END GLOBAL VARS
 
@@ -302,6 +302,7 @@ chmod 755 /home/$SUDO_USER/data/Downloads
 
 
 echo ".host:/Downloads /home/$SUDO_USER/data/Downloads fuse.vmhgfs-fuse noauto,defaults,allow_other 0 0" >> /etc/fstab
+echo "user_allow_other" >> /etc/fuse.conf
 
 } # End $SU configure_vmware_mount
 
@@ -730,17 +731,3 @@ configure_XFCE
 configure_nginx
 clean_up
 systemctl reboot
-
-
-
-
-
-
-
-
-
-
-
-
-
-
