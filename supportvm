@@ -253,6 +253,10 @@ echo "xset -dpms " >> \$HOME/.xsessionrc
 echo "xset s off" >> \$HOME/.xsessionrc
 echo 'setxkbmap -layout "de" -variant "nodeadkeys" ' >> \$HOME/.xsessionrc
 
+# anpassung ssh
+echo "generate ssh keys"
+ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa <<<y >/dev/null 2>&1
+
 ## 
 
 ## delete me mysel
@@ -319,8 +323,8 @@ configure_vmware_mount
 
 
 # configure user 
-export -f configure_ssh
-su -p $SUDO_USER -c configure_ssh
+#export -f configure_ssh
+#su -p $SUDO_USER -c configure_ssh
 
 configure_XFCE
 
