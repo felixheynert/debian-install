@@ -44,6 +44,7 @@ configure_sudo
 
 echo "Install Xfce und VMtools and some Services"
 echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections
+echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections
 
 update_vm () {
 #
@@ -73,7 +74,15 @@ cat << EOF > /etc/lightdm/lightdm.conf.d/01_autologin.conf
 autologin-user=$SUDO_USER
 autologin-guest=false
 autologin-timeout = 0
+Session=xfce
+
 EOF
+
+## dpkg-reconfigure lightdm
+
+dpkg-reconfigure lightdm
+
+
 }  # End configure_lightdm()
 
 
@@ -267,9 +276,9 @@ ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa <<<y >/dev/null 2>&1
 ##
 
 ## delete me mysel
-#if [[ -e $myAutoStart ]] ; then rm -rf $myAutoStart; fi
-#rm -rf \$mySelf
-#systemctl reboot
+if [[ -e $myAutoStart ]] ; then rm -rf $myAutoStart; fi
+rm -rf \$mySelf
+systemctl reboot
 EOF
 
 chown $SUDO_USER:$SUDO_USER $myFile
