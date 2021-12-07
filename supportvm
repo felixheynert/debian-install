@@ -196,9 +196,8 @@ elif [[ -d /home/$SUDO_USER/Schreibtisch ]]
 fi
 
 
-myFile="$Desktop/XFCE_DISABLE_SCREENSAFER.sh"
+myFile="/home/$SUDO_USER/XFCE_DISABLE_SCREENSAFER.sh"
 myAutoStart="/home/$SUDO_USER/.config/autostart/runonce.desktop"
-
 
 cat <<EOF > myAutoStart
 [Desktop Entry]
@@ -261,16 +260,13 @@ ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa <<<y >/dev/null 2>&1
 
 ## delete me mysel
 if [[ -e $myAutostart ]] ; then rm -rf $myAutostart; fi
-
 rm -rf \$mySelf
-
-
 systemctl reboot
 EOF
+
 chown $SUDO_USER:$SUDO_USER $myFile
 chmod 755 $myFile
-
-} 
+} # Ende XFCE anpassung
 
 configure_ssh () {
 echo "generate ssh keys"
