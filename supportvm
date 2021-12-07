@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+
+## Install vm
+
+## Global VARS
+
+install_packages="open-vm-tools-desktop vsftpd tftp-hpa nginx nginx-extras wireshark netcat tcpdump ftp openssh-server"
+
+
+
+## END GLOBAL VARS
+
+
+if [ `id -u` != "0" ]
+        then
+                clear
+                echo 
+                echo "You are User $(id)"
+                echo 
+                echo "##########################"
+                echo "$0 must run as root"
+                echo "Please use sudo ! We need sudo (sudo -i)!"
+                echo "Press any key to continue"
+                while [ true ] ; do
+                    read -t 3 -n 1
+                        if [ $? = 0 ] ; then
+                            exit 1;
+                        fi
+                done
+fi
+
+if	[[ -z $SUDO_USER ]]
+    then
+        # Ok SUDO_USER existiert nicht.. wir nehmen einfach den Benutzer mit der UID=1000 zum autologin etc
+        export SUDO_USER=$(id -n -u 1000)
+fi
+
+
+#  to configure sudo
+configure_sudo () {
+
+cat << EOF > /etc/sudoers.d/$SUDO_USER
+cw-support	ALL=(ALL:ALL)	NOPASSWD:ALL
+EOF
+} # End configure_sudo()
+
+configure_sudo
+
+echo "Install Xfce und VMtools and some Services" 
+echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections 
+ 
+# 
+apt update && apt dist-upgrade -y
+tasksel install xfce-desktop
+apt install vim $install_packages -y 
+adduser $SUDO_USER wireshark
+clear
+echo 
+echo "#######################################################################"
+echo 
+
+
+## We will define some s for Customization
+
+
+configure_lightdm () {
+echo "Customize lightdm/lightdm"
+## Lightdm autologin
+if ! [ -d /etc/lightdm/lightdm.conf.d ]; then
+       	   mkdir -p /etc/lightdm/lightdm.conf.d 
+fi
+
+
+cat << EOF > /etc/lightdm/lightdm.conf.d/01_autologin.conf
+[Seat:*]
+autologin-user=$SUDO_USER
+autologin-guest=false
+autologin-timeout = 0
+EOF
+}  # End configure_lightdm()
+
+
+
+configure_tftp () {
+echo "configure tftp"
+
+FILENAME="/etc/default/tftpd-hpa"
+SERVICE="tftpd-hpa"
+TFTP_USER=$SUDO_USER
+
+## Test if file exists
+
+if [[ -e $FILENAME ]]; then mv $FILENAME{,.bak}; fi
+if [[ ! -d /home/$SUDO_USER/data ]] ; then mkdir -p /home/$SUDO_USER/data ; fi
+chmod 755 /home/$SUDO_USER/data
+chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/data
+
+cat << EOF > $FILENAME
+# /etc/default/tftpd-hpa
+
+TFTP_USERNAME="$TFTP_USER"
+TFTP_DIRECTORY="/home/$TFTP_USER/data"
+TFTP_ADDRESS=":69"
+TFTP_OPTIONS="--ipv4 -vvv --create --secure"
+
+EOF
+
+systemctl restart $SERVICE
+unset FILENAME SERVICE TFTP_USER
+
+} # End configure_tftp()
+
+
+configure_ftp () {
+## Customize vsftp
+export FILENAME="/etc/vsftpd.conf"
+
+echo You are User `id`
+if [ `id -u` != "0" ]
+        then
+                echo "########################## must run as root"
+                echo "invoking sudo"
+				sudo -i FILENAME=$FILENAME
+fi
+
+
+# Remark %SUDO_USER is the old $USER
+## VSFTP is really picky about permissions 
+export FTPHOME="/home/$SUDO_USER"
+
+if [[ -e $FILENAME ]]; then mv $FILENAME{,.bak}; fi
+if [[ ! -d $FTPHOME/data/upload ]] ; then mkdir -pv $FTPHOME/data/{upload,Downloads}; fi
+chown -R $SUDO_USER:$SUDO_USER /home/$SUDO_USER/data
+chown 555 /home/$SUDO_USER/data
+
+cat << EOF > $FILENAME
+listen=NO
+listen_ipv6=YES
+anonymous_enable=YES
+local_enable=YES
+write_enable=YES
+local_umask=022
+anon_upload_enable=YES
+anon_root=/home/$SUDO_USER/data/
+no_anon_password=YES
+ftp_username=$SUDO_USER
+anon_mkdir_write_enable=YES
+dirmessage_enable=YES
+use_localtime=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+chown_uploads=YES
+chown_username=$SUDO_USER
+secure_chroot_dir=/var/run/vsftpd/empty
+pam_service_name=vsftpd
+rsa_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+rsa_private_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+ssl_enable=NO
+
+
+EOF
+# 
+unset FILENAME FTPHOME
+
+} ## End  configure_ftp()
+
+
+
+
+configure_sftp () {
+## SFTP Anpassung
+# make ~./data to the start path oft sftp-server
+# 
+
+sed -i 's/sftp-server/sftp-server \-d \%d\/data/' /etc/ssh/sshd_config
+systemctl restart sshd
+} ## End  configure_sftp
+
+
+
+configure_XFCE () {
+
+########################################
+# XFCE Powermanagment & Screensafer
+# Hier wir der Screensafer und Powersafe im XFCE angepasst.
+# Copy und Paste in ein Terminal des Benutzers.
+# Dieses Script muss einmal ausgeführt werden.
+# Wir erstellen also 
+
+if [[ -d /home/$SUDO_USER/Desktop ]] 
+    then 
+    Desktop="/home/$SUDO_USER/Desktop"
+elif [[ -d /home/$SUDO_USER/Schreibtisch ]] 
+    then 
+    Desktop="/home/$SUDO_USER/Schreibtisch"
+fi
+
+
+myFile="$Desktop/XFCE_DISABLE_SCREENSAFER.sh"
+myAutoStart="/home/$SUDO_USER/.config/autostart/runonce.desktop"
+
+
+cat <<EOF > myAutoStart
+[Desktop Entry]
+Version=0.01
+Encoding=UTF-8
+Type=Application
+Name=XFCE-Customization
+Comment=XFCE-Customization
+Exec=$myFile
+GenericName=XFCE-Customization
+EOF
+chmod 755 $myAutoStart
+chown $SUDO_USER:$SUDO_USER $myAutoStart
+
+cat << EOF > $myFile
+#!/usr/bin/env bash
+clear
+echo 
+echo "XFCE customization"
+mySelf=\${0}
+
+if [ $(id -u) == "0" ]
+    then
+        echo "You are root"
+        echo "This section should be run by a nomal user"
+fi
+
+if [[ -e XDG_CURRENT_DESKTOP=XFCE ]]
+then
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -s 0 --create -t int 
+/usr/bin/xfconf-query -c xfce4-session -n -t bool -p /startup/screensaver/enabled -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-battery -s 0 --create -t int
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/inactivity-sleep-mode-on-ac -s 0 --create -t int
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/inactivity-sleep-mode-on-battery -s 0 --create -t int 
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/lock-screen-suspend-hibernate -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/logind-handle-lid-switch -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/power-button-action -s 0 --create -t int
+/usr/bin/xfconf-query -c xfce4-screensaver -p /lock/saver-activation/enabled  -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-screensaver -p /lock/status-messages/enabled   -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-screensaver -p /lock/user-switching/enabled    -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-screensaver -p /saver/enabled                  -s false --create -t bool 
+/usr/bin/xfconf-query -c xfce4-screensaver -p /lock/enabled -s false --create -t bool
+/usr/bin/xfconf-query -c xfce4-screensaver -p /saver/idle-activation/enabled  -s false --create -t bool 
+/usr/bin/xfconf-query -c xfce4-screensaver -p /saver/mode                    -s  0 --create -t int
+
+
+fi
+# Anpassung an die XSession
+echo "xset dpms 0 0 0" >> \$HOME/.xsessionrc
+echo "xset -dpms " >> \$HOME/.xsessionrc
+echo "xset s off" >> \$HOME/.xsessionrc
+echo 'setxkbmap -layout "de" -variant "nodeadkeys" ' >> \$HOME/.xsessionrc
+
+## 
+
+## delete me mysel
+if [[ -e $myAutostart ]] ; then rm -rf $myAutostart; fi
+
+rm -rf \$mySelf
+
+
+systemctl reboot
+EOF
+chown $SUDO_USER:$SUDO_USER $myFile
+chmod 755 $myFile
+
+} 
+
+configure_ssh () {
+echo "generate ssh keys"
+ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa <<<y >/dev/null 2>&1
+}
+
+configure_vmware_mount () {
+## Anpassungung vmware Mount
+echo "VMWare Workstation kann eine locales Verzeichniss mounten. Hierzu sind die open-vm-tools-desktop notwendig
+In Vmware Worksation geht man wie Folgt vor:
+
+cw-support-vm > Settings > Options > Shared Folders
+	* Always Enable Auswählen
+	* Add > HostPath == C:\Users\%USERNAME%\Downloads 
+		* Name sollte automatisch 'Downloads' heißen
+	* Next > Enable this Share auswählen  > Finish
+
+Wir setzen jedenfalls den Mount-Point auf /home/$SUDO_USER/data/Downloads
+
+"
+
+if [[ ! -d /home/$SUDO_USER/data/Downloads ]] ; then mkdir -pv /home/$SUDO_USER/data/Downloads; fi
+chown $SUDO_USER:$SUDO_USER /home/$SUDO_USER/Downloads
+chmod 755 /home/$SUDO_USER/data/Downloads
+
+
+echo ".host:/Downloads /home/$SUDO_USER/data/Downloads fuse.vmhgfs-fuse noauto,defaults,allow_other 0 0" >> /etc/fstab
+
+} # End $SU configure_vmware_mount
+	
+
+	
+clean_up () {
+## Clean up
+echo "Cleanup"
+apt auto-remove -y
+apt-cache clean
+}
+
+
+
+
+# main
+## global configuration 
+configure_lightdm
+configure_tftp
+configure_ftp
+configure_sftp
+configure_vmware_mount
+
+
+# configure user 
+export -f configure_ssh
+su -p $SUDO_USER -c configure_ssh
+
+configure_XFCE
+
+
+
+
